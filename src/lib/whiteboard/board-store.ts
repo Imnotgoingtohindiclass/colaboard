@@ -7,6 +7,7 @@ export interface BoardUser {
   username: string;
   avatarSeed: string;
   color: string;
+  isDrawing?: boolean;
 }
 
 export interface RemoteCursor {
@@ -17,7 +18,7 @@ export interface RemoteCursor {
   y: number;
 }
 
-type Listener = (...args: unknown[]) => void;
+type Listener = (...args: any[]) => void;
 
 const PRESENCE_TIMEOUT = 8000;
 let storeCounter = 0;

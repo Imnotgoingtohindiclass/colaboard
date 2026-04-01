@@ -1,5 +1,12 @@
 'use client';
 
+// ============================================================
+// Whiteboard Toolbar Component
+// ============================================================
+// Provides drawing tools, color picker, thickness selector,
+// undo/redo, zoom controls, clear board, and export functionality.
+// ============================================================
+
 import React, { useCallback } from 'react';
 import {
   Pencil,
@@ -32,7 +39,6 @@ interface ToolbarProps {
   onRedo: () => void;
   onClear: () => void;
   onExportPng: () => void;
-  onExportSvg: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
@@ -55,7 +61,6 @@ export default function Toolbar({
   onRedo,
   onClear,
   onExportPng,
-  onExportSvg,
   onZoomIn,
   onZoomOut,
   onZoomReset,
