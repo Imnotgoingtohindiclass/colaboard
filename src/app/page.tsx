@@ -1,17 +1,5 @@
 'use client';
 
-// ============================================================
-// Main Page — Hash-based Router
-// ============================================================
-// Routes between LandingPage and WhiteboardApp based on URL hash.
-//   /#               → Landing Page
-//   /#board=abc123   → Whiteboard for board "abc123"
-//
-// Uses a `mounted` guard to prevent hydration mismatch:
-// server always renders a spinner; client reads the hash
-// only after mount and switches to the correct view.
-// ============================================================
-
 import React, { useState, useEffect, useCallback } from 'react';
 import LandingPage from '@/components/whiteboard/LandingPage';
 import WhiteboardApp from '@/components/whiteboard/WhiteboardApp';
@@ -32,7 +20,6 @@ function parseHash(hash: string): View {
 }
 
 export default function Home() {
-  // Default to landing; read hash only on client (window is undefined during SSR)
   const [view, setView] = useState<View>({ type: 'landing' });
   const [mounted, setMounted] = useState(false);
 
@@ -48,19 +35,16 @@ export default function Home() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Navigate to a board
   const handleEnterBoard = useCallback((boardId: string) => {
     window.location.hash = `board=${boardId}`;
     setView({ type: 'board', boardId });
   }, []);
 
-  // Navigate back to landing
   const handleBack = useCallback(() => {
     window.location.hash = '';
     setView({ type: 'landing' });
   }, []);
 
-  // Prevent hydration flash while client takes over
   if (!mounted) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-gray-50">

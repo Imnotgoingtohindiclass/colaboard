@@ -1,16 +1,5 @@
 'use client';
 
-// ============================================================
-// Landing Page Component
-// ============================================================
-// Entry point for the whiteboard app.
-// Users can create a new board or join an existing one via ID or link.
-// Board ID is stored in the URL hash for easy sharing.
-//
-// Uses useState + useEffect to avoid hydration mismatch:
-// getSession() reads localStorage which is unavailable during SSR.
-// ============================================================
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +22,6 @@ import {
 } from 'lucide-react';
 
 interface LandingPageProps {
-  /** Called when user wants to enter a board */
   onEnterBoard: (boardId: string) => void;
 }
 
@@ -42,15 +30,12 @@ export default function LandingPage({ onEnterBoard }: LandingPageProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [session, setSession] = useState<ReturnType<typeof getSession> | null>(null);
 
-  // Load session only on the client to avoid hydration mismatch
-  // (getSession() reads localStorage which is undefined during SSR)
   useEffect(() => {
     setSession(getSession());
   }, []);
 
   const handleCreate = useCallback(() => {
     setIsCreating(true);
-    // Small delay for visual feedback
     setTimeout(() => {
       const boardId = generateBoardId();
       onEnterBoard(boardId);
@@ -70,7 +55,6 @@ export default function LandingPage({ onEnterBoard }: LandingPageProps) {
     }
   }
 
-  // Show spinner while session loads (avoids hydration flash)
   if (!session) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -192,7 +176,6 @@ export default function LandingPage({ onEnterBoard }: LandingPageProps) {
   );
 }
 
-/** Small feature highlight card */
 function FeatureCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
     <div className="text-center p-3">

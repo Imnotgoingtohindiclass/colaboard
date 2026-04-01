@@ -13,12 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "colaboard — Real-time Collaborative Whiteboard",
+  title: "colaboard",
   description: "Draw together in real time. Free collaborative whiteboard with no sign-up required. Features live cursors, chat, and CRDT-based sync.",
   keywords: ["whiteboard", "collaborative", "real-time", "drawing", "CRDT", "Yjs"],
   authors: [{ name: "colaboard" }],
   openGraph: {
-    title: "colaboard — Real-time Collaborative Whiteboard",
+    title: "colaboard",
     description: "Draw together in real time. No sign-up required.",
     type: "website",
   },

@@ -1,12 +1,5 @@
 'use client';
 
-// ============================================================
-// User List Component
-// ============================================================
-// Displays all active users in the current whiteboard room.
-// Shows avatar, username, color, and current activity status.
-// ============================================================
-
 import React from 'react';
 import type { BoardUser } from '@/lib/whiteboard/board-store';
 import { getAvatarUrl } from '@/lib/whiteboard/session';
@@ -15,15 +8,10 @@ import { Button } from '@/components/ui/button';
 import { X, Copy, Users } from 'lucide-react';
 
 interface UserListProps {
-  /** Users from BoardStore presence */
   users: BoardUser[];
-  /** Current user's session ID */
   ownUserId: string;
-  /** Whether the panel is visible */
   visible: boolean;
-  /** Close callback */
   onClose: () => void;
-  /** Board ID for display */
   boardId: string;
 }
 

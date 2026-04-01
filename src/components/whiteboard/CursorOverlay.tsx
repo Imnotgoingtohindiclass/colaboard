@@ -1,19 +1,10 @@
 'use client';
 
-// ============================================================
-// Cursor Overlay Component
-// ============================================================
-// Renders live cursors from other users on the whiteboard.
-// Each cursor shows the username and user color.
-// ============================================================
-
 import React from 'react';
 import type { RemoteCursor } from '@/lib/whiteboard/board-store';
 
 interface CursorOverlayProps {
-  /** Remote cursor data from BoardStore */
   cursors: RemoteCursor[];
-  /** Viewport state for coordinate transformation */
   viewport: { x: number; y: number; scale: number };
 }
 
@@ -26,7 +17,6 @@ export default function CursorOverlay({ cursors, viewport }: CursorOverlayProps)
         const screenX = x * viewport.scale + viewport.x;
         const screenY = y * viewport.scale + viewport.y;
 
-        // Clamp to visible area
         if (screenX < -50 || screenY < -50 || screenX > window.innerWidth + 50 || screenY > window.innerHeight + 50) {
           return null;
         }
@@ -40,7 +30,6 @@ export default function CursorOverlay({ cursors, viewport }: CursorOverlayProps)
               transition: 'transform 75ms ease-out, opacity 200ms',
             }}
           >
-            {/* Cursor pointer */}
             <svg
               width="16"
               height="20"
@@ -56,8 +45,6 @@ export default function CursorOverlay({ cursors, viewport }: CursorOverlayProps)
                 strokeLinejoin="round"
               />
             </svg>
-
-            {/* Username label */}
             <div
               className="absolute left-3 top-4 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap shadow-sm"
               style={{

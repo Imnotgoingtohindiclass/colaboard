@@ -44,8 +44,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     const store = new BoardStore();
     storeRef.current = store;
 
-    // Event listeners — can be registered BEFORE connect() because the
-    // board-level bridge in connect() forwards all events to this.emit().
     store.on('connection-change', (isConnected: boolean) => {
       setConnected(isConnected);
     });
@@ -85,7 +83,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
       setChatMessages(history);
     });
 
-    // board-store emits 'users-update' with (users, cursors) as two args
     store.on('users-update', (...args: unknown[]) => {
       const newUsers = args[0] as BoardUser[];
       const newCursors = args[1] as RemoteCursor[];
@@ -94,7 +91,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
       if (newCursors) setCursors(newCursors);
     });
 
-    // board-store emits 'cursors-update' with just cursors array
     store.on('cursors-update', (newCursors: RemoteCursor[]) => {
       setCursors(newCursors ?? []);
     });
@@ -106,8 +102,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
       storeRef.current = null;
     };
   }, [boardId, session]);
-
-  // ── Handlers ──────────────────────────────────────────────
 
   const handleAddStroke = useCallback((stroke: Stroke) => {
     storeRef.current?.addStroke(stroke);
@@ -183,7 +177,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     storeRef.current?.sendChatMessage(message);
   }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
