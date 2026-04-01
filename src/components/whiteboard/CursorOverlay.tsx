@@ -1,86 +1,71 @@
 'use client';
 
+// ============================================================
+// Cursor Overlay Component
+// ============================================================
+// Renders live cursors from other users on the whiteboard.
+// Each cursor shows the username and user color.
+// ============================================================
+
 import React from 'react';
-import { RemoteCursor } from '@/lib/whiteboard/whiteboard-socket';
+import type { RemoteCursor } from '@/lib/whiteboard/board-store';
 
 interface CursorOverlayProps {
-  cursors: Map<string, RemoteCursor>;
-  drawingUsers: Set<string>;
-  ownUserId: string;
+  /** Remote cursor data from BoardStore */
+  cursors: RemoteCursor[];
+  /** Viewport state for coordinate transformation */
   viewport: { x: number; y: number; scale: number };
 }
 
-export default function CursorOverlay({ cursors, drawingUsers, ownUserId, viewport }: CursorOverlayProps) {
-  if (cursors.size === 0) return null;
+export default function CursorOverlay({ cursors, viewport }: CursorOverlayProps) {
+  if (cursors.length === 0) return null;
 
   return (
-    <div
-      className="absolute inset-0 pointer-events-none z-10 overflow-hidden"
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-    >
-      {Array.from(cursors.entries()).map(([userId, cursor]) => {
-        if (userId === ownUserId) return null;
+    <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+      {cursors.map(({ userId, username, color, x, y }) => {
+        const screenX = x * viewport.scale + viewport.x;
+        const screenY = y * viewport.scale + viewport.y;
 
-        const screenX = cursor.x * viewport.scale + viewport.x;
-        const screenY = cursor.y * viewport.scale + viewport.y;
-
-        if (screenX < -20 || screenY < -20 || screenX > window.innerWidth + 20 || screenY > window.innerHeight + 20) {
+        // Clamp to visible area
+        if (screenX < -50 || screenY < -50 || screenX > window.innerWidth + 50 || screenY > window.innerHeight + 50) {
           return null;
         }
 
         return (
           <div
             key={userId}
+            className="absolute transition-all duration-75 ease-out"
             style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
               transform: `translate(${screenX}px, ${screenY}px)`,
-              transition: 'transform 75ms ease-out',
-              willChange: 'transform',
-              zIndex: 20,
-              pointerEvents: 'none',
+              transition: 'transform 75ms ease-out, opacity 200ms',
             }}
           >
-            {/* Small cursor arrow */}
-            <svg width="12" height="16" viewBox="0 0 12 16" fill="none" style={{ display: 'block' }}>
+            {/* Cursor pointer */}
+            <svg
+              width="16"
+              height="20"
+              viewBox="0 0 16 20"
+              fill="none"
+              className="drop-shadow-sm"
+            >
               <path
-                d="M1 1L4.5 14L6 8L11 6L1 1Z"
-                fill={cursor.color}
+                d="M1 1L6 18L8.5 10.5L15 8L1 1Z"
+                fill={color}
                 stroke="white"
-                strokeWidth="1"
+                strokeWidth="1.5"
                 strokeLinejoin="round"
               />
             </svg>
-            {/* Username label - compact */}
+
+            {/* Username label */}
             <div
+              className="absolute left-3 top-4 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap shadow-sm"
               style={{
-                position: 'absolute',
-                left: 10,
-                top: 10,
-                backgroundColor: cursor.color,
+                backgroundColor: color,
                 color: 'white',
-                fontSize: '10px',
-                fontWeight: 500,
-                whiteSpace: 'nowrap',
-                padding: '1px 5px',
-                borderRadius: '4px',
-                lineHeight: '1.3',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
               }}
             >
-              {cursor.username}
-              {drawingUsers.has(userId) && (
-                <span style={{
-                  display: 'inline-block',
-                  width: '5px',
-                  height: '5px',
-                  borderRadius: '50%',
-                  backgroundColor: 'white',
-                  marginLeft: '3px',
-                  animation: 'pulse 1s infinite',
-                }} />
-              )}
+              <span>{username}</span>
             </div>
           </div>
         );

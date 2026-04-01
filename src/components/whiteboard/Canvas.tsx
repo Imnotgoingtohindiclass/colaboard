@@ -1,5 +1,16 @@
 'use client';
 
+// ============================================================
+// Whiteboard Canvas Component
+// ============================================================
+// HTML5 Canvas-based drawing engine with:
+// - Stroke-based rendering (vector paths, not pixels)
+// - Smooth drawing with point interpolation
+// - Zoom and pan support
+// - Touch and stylus support
+// - Incremental rendering (avoids full re-renders)
+// ============================================================
+
 import React, {
   useRef,
   useEffect,
@@ -8,34 +19,43 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from 'react';
-import { Point, Stroke, DrawingConfig, DEFAULT_DRAWING_CONFIG } from '@/lib/whiteboard/types';
+import { Point, Stroke, DrawingConfig } from '@/lib/whiteboard/types';
 import { interpolatePoints, generateId } from '@/lib/whiteboard/utils';
 
 export interface CanvasHandle {
+  /** Export the canvas as a PNG data URL */
   exportAsPng: () => string;
+  /** Export the canvas as an SVG string */
   exportAsSvg: () => string;
+  /** Clear the local canvas display */
   clearDisplay: () => void;
+  /** Get current viewport state */
   getViewport: () => { x: number; y: number; scale: number };
+  /** Set viewport programmatically */
   setViewport: (x: number, y: number, scale: number) => void;
 }
 
 interface CanvasProps {
-  strokesArray: {
-    toArray: () => Stroke[];
-    push: (items: unknown[]) => void;
-    length: number;
-  };
+  /** Array of strokes to render */
+  strokes: Stroke[];
+  /** Current drawing configuration (tool, color, thickness) */
   config: DrawingConfig;
+  /** User session ID */
   userId: string;
+  /** Called when user completes a stroke */
+  onAddStroke: (stroke: Stroke) => void;
+  /** Called when user starts/stops drawing (for presence) */
   onDrawingChange?: (isDrawing: boolean) => void;
+  /** Called when user moves cursor on canvas (for cursors) */
   onCursorMove?: (point: { x: number; y: number } | null) => void;
+  /** Custom class name for the container */
   className?: string;
 }
 
 const INTERPOLATION_SPACING = 2;
 
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
-  { strokesArray, config, userId, onDrawingChange, onCursorMove, className = '' },
+  { strokes, config, userId, onAddStroke, onDrawingChange, onCursorMove, className = '' },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -48,8 +68,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const animationFrameRef = useRef<number>(0);
   const renderDirtyRef = useRef(false);
   const lastRenderedLengthRef = useRef(0);
-  const strokeCacheRef = useRef<Map<string, Stroke>>(new Map());
 
+  // ---- Viewport Transform Helpers ----
+
+  /** Convert screen coordinates to canvas world coordinates */
   const screenToWorld = useCallback((screenX: number, screenY: number) => {
     const vp = viewportRef.current;
     return {
@@ -58,6 +80,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     };
   }, []);
 
+  // ---- Stroke Rendering ----
+
+  /** Render a single stroke onto the canvas context */
   const renderStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke, vp: { x: number; y: number; scale: number }) => {
     if (stroke.points.length === 0) return;
 
@@ -98,6 +123,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     ctx.restore();
   }, []);
 
+  /** Draw a subtle grid on the canvas */
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number, vp: { x: number; y: number; scale: number }) => {
     const gridSize = 20 * vp.scale;
     if (gridSize < 8) return;
@@ -120,34 +146,41 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     ctx.stroke();
   }, []);
 
+  /** Render all strokes (full re-render) */
   const renderAllStrokes = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const vp = viewportRef.current;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     drawGrid(ctx, canvas.width, canvas.height, vp);
 
-    const strokes = strokesArray.toArray() as Stroke[];
-    strokeCacheRef.current.clear();
     for (const stroke of strokes) {
-      strokeCacheRef.current.set(stroke.id, stroke);
       renderStroke(ctx, stroke, vp);
     }
-    lastRenderedLengthRef.current = strokes.length;
-  }, [strokesArray, renderStroke, drawGrid]);
 
+    // Also render current in-progress stroke
+    if (currentStrokeRef.current) {
+      renderStroke(ctx, currentStrokeRef.current, vp);
+    }
+
+    lastRenderedLengthRef.current = strokes.length;
+  }, [strokes, renderStroke, drawGrid]);
+
+  /** Render incrementally: only the new strokes since last render */
   const renderIncremental = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const strokes = strokesArray.toArray() as Stroke[];
     const lastLength = lastRenderedLengthRef.current;
 
     if (strokes.length < lastLength) {
@@ -156,32 +189,34 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
 
     const vp = viewportRef.current;
+
     for (let i = lastLength; i < strokes.length; i++) {
-      const stroke = strokes[i];
-      strokeCacheRef.current.set(stroke.id, stroke);
-      renderStroke(ctx, stroke, vp);
+      renderStroke(ctx, strokes[i], vp);
     }
+
     lastRenderedLengthRef.current = strokes.length;
 
     if (currentStrokeRef.current) {
       renderStroke(ctx, currentStrokeRef.current, vp);
     }
-  }, [strokesArray, renderStroke, renderAllStrokes]);
+  }, [strokes, renderStroke, renderAllStrokes]);
 
+  /** Schedule a render on the next animation frame */
   const scheduleRender = useCallback(() => {
-    if (renderDirtyRef.current) return;
-    renderDirtyRef.current = true;
+    cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = requestAnimationFrame(() => {
-      renderDirtyRef.current = false;
       renderIncremental();
     });
   }, [renderIncremental]);
 
+  /** Full re-render + redraw grid */
   const scheduleFullRender = useCallback(() => {
     cancelAnimationFrame(animationFrameRef.current);
     renderDirtyRef.current = false;
     renderAllStrokes();
   }, [renderAllStrokes]);
+
+  // ---- Canvas Resize ----
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -190,15 +225,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     const dpr = window.devicePixelRatio || 1;
     const rect = container.getBoundingClientRect();
+
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
+
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
 
     const ctx = canvas.getContext('2d');
-    if (ctx) ctx.scale(dpr, dpr);
+    if (ctx) {
+      ctx.scale(dpr, dpr);
+    }
+
     scheduleFullRender();
   }, [scheduleFullRender]);
+
+  // ---- Pointer Event Handlers ----
 
   const getPoint = useCallback((e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!;
@@ -206,6 +248,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
     const world = screenToWorld(rawX, rawY);
+
     return {
       x: world.x,
       y: world.y,
@@ -217,6 +260,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Middle mouse button or alt+click = pan
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       isPanningRef.current = true;
       lastPanPointRef.current = { x: e.clientX, y: e.clientY };
@@ -240,8 +284,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       tool: config.tool,
       createdAt: Date.now(),
     };
+
     currentStrokeRef.current = stroke;
     scheduleRender();
+
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
   }, [userId, config, getPoint, scheduleRender, onDrawingChange]);
@@ -260,6 +306,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
+    // Report cursor position
     const rect = canvas.getBoundingClientRect();
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
@@ -271,8 +318,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const point = getPoint(e);
     const stroke = currentStrokeRef.current;
     const lastPoint = stroke.points[stroke.points.length - 1];
+
     const newPoints = interpolatePoints(lastPoint, point, INTERPOLATION_SPACING);
     stroke.points.push(...newPoints);
+
     scheduleRender();
   }, [screenToWorld, getPoint, scheduleRender, scheduleFullRender, onCursorMove]);
 
@@ -291,18 +340,25 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     const stroke = currentStrokeRef.current;
     stroke.completedAt = Date.now();
-    strokesArray.push([stroke]);
+
+    // Send stroke to the store (persist + broadcast)
+    onAddStroke(stroke);
+
     currentStrokeRef.current = null;
     scheduleRender();
+
     canvasRef.current?.releasePointerCapture(e.pointerId);
-  }, [strokesArray, scheduleRender, onDrawingChange]);
+  }, [onAddStroke, scheduleRender, onDrawingChange]);
 
   const handlePointerLeave = useCallback(() => {
     onCursorMove?.(null);
   }, [onCursorMove]);
 
+  // ---- Zoom (Ctrl+Wheel) ----
+
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (!e.ctrlKey && !e.metaKey) return;
+
     e.preventDefault();
 
     const canvas = canvasRef.current;
@@ -323,6 +379,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     scheduleFullRender();
   }, [scheduleFullRender]);
 
+  // ---- Expose imperative methods ----
+
   useImperativeHandle(ref, () => ({
     exportAsPng: () => {
       const canvas = canvasRef.current;
@@ -330,8 +388,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return canvas.toDataURL('image/png');
     },
     exportAsSvg: () => {
-      const strokes = strokesArray.toArray() as Stroke[];
       const bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+
       for (const stroke of strokes) {
         for (const p of stroke.points) {
           bounds.minX = Math.min(bounds.minX, p.x);
@@ -340,42 +398,67 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           bounds.maxY = Math.max(bounds.maxY, p.y);
         }
       }
+
       const padding = 20;
       const w = bounds.maxX - bounds.minX + padding * 2;
       const h = bounds.maxY - bounds.minY + padding * 2;
+
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${bounds.minX - padding} ${bounds.minY - padding} ${w} ${h}">`;
       svg += `<rect width="100%" height="100%" fill="white"/>`;
+
       for (const stroke of strokes) {
         if (stroke.points.length < 2) continue;
-        const d = stroke.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+        const d = stroke.points.map((p, i) =>
+          `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
+        ).join(' ');
         svg += `<path d="${d}" stroke="${stroke.color}" stroke-width="${stroke.thickness}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
       }
+
       svg += '</svg>';
       return svg;
     },
-    clearDisplay: () => { scheduleFullRender(); },
+    clearDisplay: () => {
+      scheduleFullRender();
+    },
     getViewport: () => ({ ...viewportRef.current }),
     setViewport: (x: number, y: number, scale: number) => {
       viewportRef.current = { x, y, scale };
       scheduleFullRender();
     },
-  }), [strokesArray, scheduleFullRender]);
+  }), [strokes, scheduleFullRender]);
+
+  // ---- Effects ----
 
   useEffect(() => {
     resizeCanvas();
-    const observer = new ResizeObserver(() => resizeCanvas());
-    if (containerRef.current) observer.observe(containerRef.current);
+
+    const observer = new ResizeObserver(() => {
+      resizeCanvas();
+    });
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
     return () => {
       observer.disconnect();
       cancelAnimationFrame(animationFrameRef.current);
+      renderDirtyRef.current = false;
     };
   }, [resizeCanvas]);
 
+  // Full re-render when strokes change (from remote updates)
+  useEffect(() => {
+    scheduleFullRender();
+  }, [strokes, scheduleFullRender]);
+
+  // Watch for viewport changes in config prop
   useEffect(() => {
     viewportRef.current = { ...config.viewport };
     scheduleFullRender();
   }, [config.viewport.x, config.viewport.y, config.viewport.scale, scheduleFullRender]);
 
+  // Keyboard handler for zoom shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
@@ -384,6 +467,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         scheduleFullRender();
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [scheduleFullRender]);
@@ -394,7 +478,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   }), []);
 
   return (
-    <div ref={containerRef} className={`relative w-full h-full overflow-hidden ${className}`}>
+    <div
+      ref={containerRef}
+      className={`relative w-full h-full overflow-hidden ${className}`}
+    >
       <canvas
         ref={canvasRef}
         className="absolute inset-0"

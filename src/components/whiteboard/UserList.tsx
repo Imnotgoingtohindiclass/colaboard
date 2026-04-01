@@ -1,17 +1,29 @@
 'use client';
 
+// ============================================================
+// User List Component
+// ============================================================
+// Displays all active users in the current whiteboard room.
+// Shows avatar, username, color, and current activity status.
+// ============================================================
+
 import React from 'react';
-import type { BoardUser } from '@/lib/whiteboard/whiteboard-socket';
+import type { BoardUser } from '@/lib/whiteboard/board-store';
 import { getAvatarUrl } from '@/lib/whiteboard/session';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { X, Copy, Users } from 'lucide-react';
 
 interface UserListProps {
+  /** Users from BoardStore presence */
   users: BoardUser[];
+  /** Current user's session ID */
   ownUserId: string;
+  /** Whether the panel is visible */
   visible: boolean;
+  /** Close callback */
   onClose: () => void;
+  /** Board ID for display */
   boardId: string;
 }
 
@@ -32,54 +44,100 @@ export default function UserList({ users, ownUserId, visible, onClose, boardId }
 
   return (
     <div className="absolute right-4 top-14 z-20 w-64 bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-right-2">
+      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Users ({users.length})</span>
+          <span className="text-sm font-medium text-gray-700">
+            Users ({users.length})
+          </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={copyBoardLink} title="Copy board link">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-md"
+            onClick={copyBoardLink}
+            title="Copy board link"
+          >
             <Copy className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={onClose}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-md"
+            onClick={onClose}
+          >
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
+      {/* User List */}
       <ScrollArea className="max-h-80">
         <div className="p-2 space-y-1">
-          {users.map((user) => (
-            <div
-              key={user.id}
-              className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-colors ${
-                user.id === ownUserId ? 'bg-gray-50' : 'hover:bg-gray-50'
-              }`}
-            >
-              <div className="relative flex-shrink-0">
-                <img src={getAvatarUrl(user.avatarSeed, 32)} alt={user.username} className="w-7 h-7 rounded-full" />
-                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${user.isDrawing ? 'bg-yellow-400' : 'bg-green-400'}`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-medium text-gray-800 truncate">{user.username}</span>
-                  {user.id === ownUserId && (
-                    <span className="text-[10px] px-1 py-0.5 bg-gray-200 text-gray-500 rounded font-medium">You</span>
-                  )}
+          {users.map((user) => {
+            const isSelf = user.id === ownUserId;
+            return (
+              <div
+                key={user.id}
+                className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-colors ${
+                  isSelf ? 'bg-gray-50' : 'hover:bg-gray-50'
+                }`}
+              >
+                {/* Avatar */}
+                <div className="relative flex-shrink-0">
+                  <img
+                    src={getAvatarUrl(user.avatarSeed, 32)}
+                    alt={user.username}
+                    className="w-7 h-7 rounded-full"
+                  />
+                  <div
+                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                      user.isDrawing ? 'bg-yellow-400' : 'bg-green-400'
+                    }`}
+                  />
                 </div>
-                <span className="text-[11px] text-gray-400">{user.isDrawing ? 'Drawing...' : 'Viewing'}</span>
+
+                {/* Username & Status */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-gray-800 truncate">
+                      {user.username}
+                    </span>
+                    {isSelf && (
+                      <span className="text-[10px] px-1 py-0.5 bg-gray-200 text-gray-500 rounded font-medium">
+                        You
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-gray-400">
+                    {user.isDrawing ? 'Drawing...' : 'Viewing'}
+                  </span>
+                </div>
+
+                {/* Color indicator */}
+                <div
+                  className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200"
+                  style={{ backgroundColor: user.color }}
+                />
               </div>
-              <div className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200" style={{ backgroundColor: user.color }} />
-            </div>
-          ))}
+            );
+          })}
+
           {users.length === 0 && (
-            <div className="text-center py-6 text-gray-400 text-sm">No users connected</div>
+            <div className="text-center py-6 text-gray-400 text-sm">
+              No users connected
+            </div>
           )}
         </div>
       </ScrollArea>
 
+      {/* Share link hint */}
       <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
-        <p className="text-[11px] text-gray-400 text-center">Share the URL to invite others</p>
+        <p className="text-[11px] text-gray-400 text-center">
+          Share the URL to invite others
+        </p>
       </div>
     </div>
   );

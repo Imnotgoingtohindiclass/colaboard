@@ -13,8 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Collab Board — Real-time Collaborative Whiteboard",
-  description: "Draw together in real time. Free collaborative whiteboard with no sign-up required.",
+  title: "colaboard — Real-time Collaborative Whiteboard",
+  description: "Draw together in real time. Free collaborative whiteboard with no sign-up required. Features live cursors, chat, and CRDT-based sync.",
+  keywords: ["whiteboard", "collaborative", "real-time", "drawing", "CRDT", "Yjs"],
+  authors: [{ name: "colaboard" }],
+  openGraph: {
+    title: "colaboard — Real-time Collaborative Whiteboard",
+    description: "Draw together in real time. No sign-up required.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "colaboard",
+    description: "Real-time collaborative whiteboard",
+  },
 };
 
 export default function RootLayout({
@@ -24,7 +36,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-gray-900 overflow-hidden`}
+      >
         {children}
       </body>
     </html>
