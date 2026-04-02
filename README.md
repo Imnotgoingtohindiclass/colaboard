@@ -1,4 +1,4 @@
-# [colabord](https://colaboard.vercel.app)
+# [colaboard](https://colaboard.vercel.app)
 
 Real-time collaborative whiteboard. No sign-up required.
 
