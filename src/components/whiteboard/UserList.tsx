@@ -1,5 +1,12 @@
 'use client';
 
+// ============================================================
+// User List Component
+// ============================================================
+// Displays all active users in the current whiteboard room.
+// Receives users from WhiteboardApp via BroadcastChannel + presence.
+// ============================================================
+
 import React from 'react';
 import type { BoardUser } from '@/lib/whiteboard/board-store';
 import { getAvatarUrl } from '@/lib/whiteboard/session';
@@ -8,10 +15,15 @@ import { Button } from '@/components/ui/button';
 import { X, Copy, Users } from 'lucide-react';
 
 interface UserListProps {
+  /** Array of active users from BoardStore */
   users: BoardUser[];
+  /** Current user's ID (to highlight "You") */
   ownUserId: string;
+  /** Whether the panel is visible */
   visible: boolean;
+  /** Close callback */
   onClose: () => void;
+  /** Board ID for display */
   boardId: string;
 }
 
@@ -64,54 +76,45 @@ export default function UserList({ users, ownUserId, visible, onClose, boardId }
       {/* User List */}
       <ScrollArea className="max-h-80">
         <div className="p-2 space-y-1">
-          {users.map((user) => {
-            const isSelf = user.id === ownUserId;
-            return (
-              <div
-                key={user.id}
-                className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-colors ${
-                  isSelf ? 'bg-gray-50' : 'hover:bg-gray-50'
-                }`}
-              >
-                {/* Avatar */}
-                <div className="relative flex-shrink-0">
-                  <img
-                    src={getAvatarUrl(user.avatarSeed, 32)}
-                    alt={user.username}
-                    className="w-7 h-7 rounded-full"
-                  />
-                  <div
-                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                      user.isDrawing ? 'bg-yellow-400' : 'bg-green-400'
-                    }`}
-                  />
-                </div>
-
-                {/* Username & Status */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-gray-800 truncate">
-                      {user.username}
-                    </span>
-                    {isSelf && (
-                      <span className="text-[10px] px-1 py-0.5 bg-gray-200 text-gray-500 rounded font-medium">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-gray-400">
-                    {user.isDrawing ? 'Drawing...' : 'Viewing'}
-                  </span>
-                </div>
-
-                {/* Color indicator */}
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200"
-                  style={{ backgroundColor: user.color }}
+          {users.map((user) => (
+            <div
+              key={user.id}
+              className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-colors ${
+                user.id === ownUserId
+                  ? 'bg-gray-50'
+                  : 'hover:bg-gray-50'
+              }`}
+            >
+              {/* Avatar */}
+              <div className="relative flex-shrink-0">
+                <img
+                  src={getAvatarUrl(user.avatarSeed, 32)}
+                  alt={user.username}
+                  className="w-7 h-7 rounded-full"
                 />
               </div>
-            );
-          })}
+
+              {/* Username */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-gray-800 truncate">
+                    {user.username}
+                  </span>
+                  {user.id === ownUserId && (
+                    <span className="text-[10px] px-1 py-0.5 bg-gray-200 text-gray-500 rounded font-medium">
+                      You
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Color indicator */}
+              <div
+                className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200"
+                style={{ backgroundColor: user.color }}
+              />
+            </div>
+          ))}
 
           {users.length === 0 && (
             <div className="text-center py-6 text-gray-400 text-sm">

@@ -53,13 +53,8 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     });
 
     store.on('stroke-added', (stroke: Stroke) => {
-      console.log(`[WhiteboardApp] stroke-added received: id=${stroke.id}, points=${stroke.points?.length}`);
       setStrokes((prev) => {
-        if (prev.some((s) => s.id === stroke.id)) {
-          console.log(`[WhiteboardApp] stroke ${stroke.id} already exists, skipping`);
-          return prev;
-        }
-        console.log(`[WhiteboardApp] Adding stroke ${stroke.id}, total strokes now ${prev.length + 1}`);
+        if (prev.some((s) => s.id === stroke.id)) return prev;
         return [...prev, stroke];
       });
     });
@@ -83,14 +78,15 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
       setChatMessages(history);
     });
 
+    // board-store emits 'users-update' with (users, cursors) as two args
     store.on('users-update', (...args: unknown[]) => {
       const newUsers = args[0] as BoardUser[];
       const newCursors = args[1] as RemoteCursor[];
-      console.log(`[WhiteboardApp] users-update: ${newUsers?.length ?? 0} users, ${newCursors?.length ?? 0} cursors`);
       setUsers(newUsers ?? []);
       if (newCursors) setCursors(newCursors);
     });
 
+    // board-store emits 'cursors-update' with just cursors array
     store.on('cursors-update', (newCursors: RemoteCursor[]) => {
       setCursors(newCursors ?? []);
     });
@@ -102,6 +98,8 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
       storeRef.current = null;
     };
   }, [boardId, session]);
+
+  // ── Handlers ──────────────────────────────────────────────
 
   const handleAddStroke = useCallback((stroke: Stroke) => {
     storeRef.current?.addStroke(stroke);
@@ -123,6 +121,7 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     setConfig((prev) => ({ ...prev, ...update }));
   }, []);
 
+  // Sync camera from Canvas → CursorOverlay (runs during pan/zoom)
   const handleCameraChange = useCallback((cam: { x: number; y: number; zoom: number }) => {
     setConfig((prev) => ({
       ...prev,
@@ -151,18 +150,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     link.click();
   }, [boardId]);
 
-  const handleExportSvg = useCallback(() => {
-    const svg = canvasRef.current?.exportAsSvg();
-    if (!svg) return;
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `whiteboard-${boardId}-${Date.now()}.svg`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [boardId]);
-
   const handleZoomIn = useCallback(() => {
     const vp = canvasRef.current?.getViewport();
     if (!vp) return;
@@ -188,6 +175,7 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     storeRef.current?.sendChatMessage(message);
   }, []);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
