@@ -7,7 +7,6 @@ export interface BoardUser {
   username: string;
   avatarSeed: string;
   color: string;
-  isDrawing?: boolean;
 }
 
 export interface RemoteCursor {
@@ -18,11 +17,40 @@ export interface RemoteCursor {
   y: number;
 }
 
-type Listener = (...args: any[]) => void;
+type Listener = (...args: unknown[]) => void;
+
+// ══════════════════════════════════════════════════════════════════
+// Real-time Architecture (Dual-layer)
+// ══════════════════════════════════════════════════════════════════
+//
+// Layer 1 — Supabase Realtime (postgres_changes)
+//   Strokes INSERT/DELETE and chat INSERT are synced via
+//   Supabase's WebSocket → WAL pipeline. This works across
+//   ALL browsers, devices, and networks.
+//
+//   ⚠️  Requires SQL (run once in Supabase SQL Editor):
+//     ALTER PUBLICATION supabase_realtime ADD TABLE strokes;
+//     ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages;
+//
+// Layer 2 — BroadcastChannel (browser native)
+//   Cursors and presence are sent via the browser's built-in
+//   BroadcastChannel API. This only works across tabs in the
+//   SAME browser. Acceptable trade-off for ephemeral data.
+//
+// Persistence — Supabase REST
+//   Initial data loaded via SELECT. Writes go through INSERT.
+//   The REST write triggers postgres_changes for all clients.
+//
+// Optimistic updates
+//   Self-initiated actions (draw, chat, clear) emit events
+//   locally IMMEDIATELY so the UI never waits. postgres_changes
+//   delivers the same event back (deduped by stroke/message id).
+// ══════════════════════════════════════════════════════════════════
 
 const PRESENCE_TIMEOUT = 8000;
 let storeCounter = 0;
 
+// ── Row → domain object mappers ──────────────────────────────
 
 function mapStrokeRow(row: Record<string, unknown>): Stroke {
   return {
@@ -49,6 +77,14 @@ function mapChatRow(row: Record<string, unknown>): ChatMessage {
   };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// RealtimeBridge — Module-level Supabase channel manager
+// ══════════════════════════════════════════════════════════════════
+// One bridge per boardId. Survives React strict-mode re-mounts.
+// Owns the Supabase Realtime channel and dispatches postgres_changes
+// events to all subscribed BoardStore instances.
+// ══════════════════════════════════════════════════════════════════
+
 interface BridgeEntry {
   bridge: RealtimeBridge;
 }
@@ -67,6 +103,7 @@ class RealtimeBridge {
       config: { broadcast: { self: true } },
     });
 
+    // ── postgres_changes: new strokes ──
     this.channel.on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'strokes', filter: `board_id=eq.${boardId}` },
@@ -79,6 +116,7 @@ class RealtimeBridge {
       },
     );
 
+    // ── postgres_changes: deleted strokes ──
     this.channel.on(
       'postgres_changes',
       { event: 'DELETE', schema: 'public', table: 'strokes', filter: `board_id=eq.${boardId}` },
@@ -93,6 +131,7 @@ class RealtimeBridge {
       },
     );
 
+    // ── postgres_changes: new chat messages ──
     this.channel.on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `board_id=eq.${boardId}` },
@@ -105,6 +144,7 @@ class RealtimeBridge {
       },
     );
 
+    // ── Subscribe & track status ──
     this.channel.subscribe((status, err) => {
       console.log(`[Realtime] board:${boardId} status=${status}`, err ?? '');
       if (status === 'SUBSCRIBED') {
@@ -121,11 +161,13 @@ class RealtimeBridge {
     console.log(`[Realtime] Created bridge for board:${boardId}`);
   }
 
+  /** Register a BoardStore — it will receive all events */
   addStore(store: BoardStore) {
     this.stores.add(store);
     console.log(`[Realtime] Store added, total=${this.stores.size}`);
   }
 
+  /** Unregister a BoardStore */
   removeStore(store: BoardStore) {
     this.stores.delete(store);
     console.log(`[Realtime] Store removed, total=${this.stores.size}`);
@@ -143,12 +185,15 @@ class RealtimeBridge {
   }
 }
 
+/** Get or create the bridge for a board */
 function getBridge(boardId: string): RealtimeBridge {
   if (!bridges.has(boardId)) {
     bridges.set(boardId, { bridge: new RealtimeBridge(boardId) });
   }
   return bridges.get(boardId)!.bridge;
 }
+
+// ── BroadcastChannel cache ──────────────────────────────────
 
 const bcCache = new Map<string, BroadcastChannel>();
 function getBc(boardId: string): BroadcastChannel {
@@ -158,23 +203,33 @@ function getBc(boardId: string): BroadcastChannel {
   return bcCache.get(boardId)!;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// BoardStore — Per-component instance
+// ══════════════════════════════════════════════════════════════════
+
 export class BoardStore {
   private boardId: string | null = null;
   private user: UserSession | null = null;
   private listeners = new Map<string, Set<Listener>>();
   private redoStack: Stroke[] = [];
 
+  // Instance identity
   private storeId = ++storeCounter;
 
+  // BroadcastChannel (same-browser cursors/presence)
   private bc: BroadcastChannel | null = null;
   private _bcHandler: ((ev: MessageEvent) => void) | null = null;
   private _keepalive: ReturnType<typeof setInterval> | null = null;
   private _cleanup: ReturnType<typeof setInterval> | null = null;
 
+  // Throttle cursor broadcasts
   private lastCursorBroadcast = 0;
 
+  // Remote user/cursor state (merged from BroadcastChannel)
   private remoteUsers = new Map<string, { user: BoardUser; lastSeen: number }>();
   private remoteCursors = new Map<string, RemoteCursor>();
+
+  // ── Event emitter ──────────────────────────────────────────
 
   on(event: string, listener: Listener): () => void {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
@@ -186,10 +241,17 @@ export class BoardStore {
     this.listeners.get(event)?.forEach((l) => l(...args));
   }
 
+  /**
+   * Called by RealtimeBridge to deliver postgres_changes events.
+   * Public so the bridge can call it; not part of the external API.
+   */
   dispatch(event: string, ...args: unknown[]) {
+    // Only deliver if we're still connected to a board
     if (!this.boardId) return;
     this.emit(event, ...args);
   }
+
+  // ── Helpers ───────────────────────────────────────────────
 
   private emitUsersUpdate() {
     const users = Array.from(this.remoteUsers.values()).map((u) => u.user);
@@ -212,6 +274,8 @@ export class BoardStore {
     });
   }
 
+  // ── Connect / Disconnect ───────────────────────────────────
+
   async connect(boardId: string, user: UserSession): Promise<void> {
     if (this.boardId === boardId) return;
     this.doCleanup();
@@ -222,6 +286,9 @@ export class BoardStore {
     this.remoteCursors.clear();
 
     console.log(`[BoardStore] connect() board=${boardId} storeId=${this.storeId}`);
+
+    // ── 1. Load initial data via REST ──
+
     const { data: strokeRows, error: strokeErr } = await supabase
       .from('strokes').select('*').eq('board_id', boardId)
       .order('created_at', { ascending: true });
@@ -242,8 +309,12 @@ export class BoardStore {
       this.emit('chat-history', chatRows.map(mapChatRow));
     }
 
+    // ── 2. Subscribe to Supabase Realtime ──
+
     const bridge = getBridge(boardId);
     bridge.addStore(this);
+
+    // ── 3. Set up BroadcastChannel (same-browser cursors/presence) ──
 
     this.bc = getBc(boardId);
 
@@ -277,8 +348,12 @@ export class BoardStore {
     };
     this.bc.addEventListener('message', this._bcHandler);
 
+    // ── 4. Announce presence + keepalive ──
+
     this.announcePresence();
     this._keepalive = setInterval(() => this.announcePresence(), 3000);
+
+    // ── 5. Stale user cleanup ──
 
     this._cleanup = setInterval(() => {
       const now = Date.now();
@@ -292,14 +367,26 @@ export class BoardStore {
       }
       if (changed) this.emitUsersUpdate();
     }, 5000);
+
+    // Note: connection-change is emitted by the bridge's subscribe callback
+    // (status === 'SUBSCRIBED'). We don't emit it here.
+    // But we emit true immediately so the UI doesn't show "Connecting..."
+    // while the WebSocket is establishing.
     this.emit('connection-change', true);
   }
+
+  // ── Public API ─────────────────────────────────────────────
+  //  Pattern: optimistic local emit + persist via REST
+  //  → REST write triggers postgres_changes → other clients notified
+  //  → Dedup in WhiteboardApp prevents double-processing
 
   async addStroke(stroke: Stroke): Promise<void> {
     if (!this.boardId) return;
 
+    // Optimistic: emit locally so the drawing tab sees it immediately
     this.emit('stroke-added', stroke);
 
+    // Persist → triggers postgres_changes INSERT for OTHER clients
     const { error } = await supabase.from('strokes').insert({
       id: stroke.id,
       board_id: this.boardId,
@@ -317,6 +404,19 @@ export class BoardStore {
     }
   }
 
+  async removeStroke(strokeId: string): Promise<void> {
+    if (!this.boardId) return;
+
+    // Optimistic: emit locally so the erasing tab sees it immediately
+    this.emit('stroke-removed', strokeId);
+
+    // Persist → triggers postgres_changes DELETE for other clients
+    const { error } = await supabase.from('strokes').delete().eq('id', strokeId);
+    if (error) {
+      console.error('[BoardStore] Failed to delete stroke:', error);
+    }
+  }
+
   async requestUndo(): Promise<void> {
     if (!this.boardId || !this.user) return;
     const { data } = await supabase
@@ -328,8 +428,10 @@ export class BoardStore {
     this.redoStack.push(mapStrokeRow(s));
     const strokeId = s.id as string;
 
+    // Optimistic
     this.emit('stroke-removed', strokeId);
 
+    // Persist → triggers postgres_changes DELETE
     await supabase.from('strokes').delete().eq('id', strokeId);
   }
 
@@ -337,8 +439,10 @@ export class BoardStore {
     const stroke = this.redoStack.pop();
     if (!stroke || !this.boardId) return;
 
+    // Optimistic
     this.emit('stroke-added', stroke);
 
+    // Persist → triggers postgres_changes INSERT
     await supabase.from('strokes').insert({
       id: stroke.id,
       board_id: this.boardId,
@@ -354,8 +458,11 @@ export class BoardStore {
 
   async clearBoard(): Promise<void> {
     if (!this.boardId) return;
+
+    // Optimistic
     this.emit('board-cleared');
 
+    // Persist → triggers postgres_changes DELETE for each stroke
     await supabase.from('strokes').delete().eq('board_id', this.boardId);
   }
 
@@ -393,8 +500,10 @@ export class BoardStore {
   async sendChatMessage(message: ChatMessage): Promise<void> {
     if (!this.boardId) return;
 
+    // Optimistic: show message immediately in the sending tab
     this.emit('chat-message', message);
 
+    // Persist → triggers postgres_changes INSERT for OTHER clients
     const { error } = await supabase.from('chat_messages').insert({
       id: message.id,
       board_id: this.boardId,
@@ -408,6 +517,8 @@ export class BoardStore {
       console.error('[BoardStore] Failed to persist chat:', error);
     }
   }
+
+  // ── Cleanup ───────────────────────────────────────────────
 
   private doCleanup() {
     if (this._keepalive) { clearInterval(this._keepalive); this._keepalive = null; }
@@ -423,6 +534,7 @@ export class BoardStore {
     console.log(`[BoardStore] disconnect() storeId=${this.storeId}`);
     this.doCleanup();
 
+    // Leave the realtime bridge
     if (this.boardId) {
       const entry = bridges.get(this.boardId);
       if (entry) {

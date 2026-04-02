@@ -107,6 +107,10 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
     storeRef.current?.addStroke(stroke);
   }, []);
 
+  const handleRemoveStroke = useCallback((strokeId: string) => {
+    storeRef.current?.removeStroke(strokeId);
+  }, []);
+
   const handleDrawingChange = useCallback((isDrawing: boolean) => {
     storeRef.current?.sendDrawingChange(isDrawing);
   }, []);
@@ -117,6 +121,13 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
 
   const handleConfigChange = useCallback((update: Partial<DrawingConfig>) => {
     setConfig((prev) => ({ ...prev, ...update }));
+  }, []);
+
+  const handleCameraChange = useCallback((cam: { x: number; y: number; zoom: number }) => {
+    setConfig((prev) => ({
+      ...prev,
+      viewport: { x: cam.x, y: cam.y, scale: cam.zoom },
+    }));
   }, []);
 
   const handleUndo = useCallback(() => {
@@ -198,8 +209,10 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
         config={config}
         userId={session.id}
         onAddStroke={handleAddStroke}
+        onRemoveStroke={handleRemoveStroke}
         onDrawingChange={handleDrawingChange}
         onCursorMove={handleCursorMove}
+        onCameraChange={handleCameraChange}
       />
 
       <CursorOverlay
@@ -258,7 +271,7 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
         <span>Ctrl+Z Undo</span>
         <span>Ctrl+Shift+Z Redo</span>
         <span>Ctrl+Scroll Zoom</span>
-        <span>Alt+Drag Pan</span>
+        <span>Scroll / Alt+Drag Pan</span>
         <span>B Users</span>
         <span>C Chat</span>
       </div>
