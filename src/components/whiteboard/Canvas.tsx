@@ -122,7 +122,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const eraseAtPoint = useCallback(
     (point: Point) => {
-      const eraserRadius = config.thickness / 2;
+      const eraserRadius = config.thickness;
       const currentStrokes = strokesRef.current;
 
       for (const s of currentStrokes) {
@@ -130,7 +130,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         for (const sp of s.points) {
           const dx = point.x - sp.x;
           const dy = point.y - sp.y;
-          const hitThreshold = eraserRadius + s.thickness / 2;
+          const hitThreshold = eraserRadius + s.thickness;
           if (dx * dx + dy * dy < hitThreshold * hitThreshold) {
             erasedIdsRef.current.add(s.id);
             onRemoveStroke?.(s.id);
