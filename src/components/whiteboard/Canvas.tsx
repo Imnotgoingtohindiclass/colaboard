@@ -1,18 +1,5 @@
 'use client';
 
-// ============================================================
-// SVG-based Whiteboard Canvas
-// ============================================================
-// Replaced Canvas2D with SVG rendering for smoother interaction.
-// Key architectural patterns:
-//   - SVG elements: React handles rendering, no manual rAF
-//   - CSS transform on <g>: GPU-accelerated camera
-//   - CSS radial-gradient background: zero-cost grid
-//   - CanvasMode state machine: clean event dispatch
-//   - Quadratic Bezier curves: smooth pen strokes
-//   - Hit-test eraser: deletes strokes, not pixels
-// ============================================================
-
 import React, {
   useRef,
   useEffect,
@@ -25,8 +12,6 @@ import React, {
 import { Point, Stroke, DrawingConfig } from '@/lib/whiteboard/types';
 import { generateId } from '@/lib/whiteboard/utils';
 
-// ── Canvas Mode State Machine ──────────────────────────────
-
 type CanvasMode =
   | 'none'
   | 'pencil'
@@ -35,19 +20,13 @@ type CanvasMode =
   | 'pressing'
   | 'selection-net';
 
-// ── Helpers ───────────────────────────────────────────────
-
 interface Camera {
   x: number;
   y: number;
   zoom: number;
 }
 
-/**
- * Convert an array of points to a smooth SVG path using quadratic Bezier curves.
- * Uses midpoints between consecutive points as anchors and actual points as
- * control points — producing a curve that passes through every midpoint.
- */
+
 function pointsToSvgPath(points: Point[]): string {
   const n = points.length;
   if (n === 0) return '';
@@ -73,15 +52,12 @@ function pointsToSvgPath(points: Point[]): string {
   return d;
 }
 
-/** Convert screen (client) coordinates to world coordinates */
 function screenToWorld(clientX: number, clientY: number, cam: Camera): Point {
   return {
     x: (clientX - cam.x) / cam.zoom,
     y: (clientY - cam.y) / cam.zoom,
   };
 }
-
-// ── Public API ────────────────────────────────────────────
 
 export interface CanvasHandle {
   exportAsPng: () => string;
@@ -90,8 +66,6 @@ export interface CanvasHandle {
   getViewport: () => { x: number; y: number; scale: number };
   setViewport: (x: number, y: number, scale: number) => void;
 }
-
-// ── Props ─────────────────────────────────────────────────
 
 interface CanvasProps {
   strokes: Stroke[];
@@ -104,8 +78,6 @@ interface CanvasProps {
   onCameraChange?: (camera: { x: number; y: number; zoom: number }) => void;
   className?: string;
 }
-
-// ── Component ─────────────────────────────────────────────
 
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   {
@@ -121,7 +93,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   },
   ref,
 ) {
-  // ── State ─────────────────────────────────────────────
 
   const [mode, setMode] = useState<CanvasMode>('none');
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
@@ -131,8 +102,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     current: Point;
   } | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
-
-  // ── Refs ──────────────────────────────────────────────
 
   const originRef = useRef<Point | null>(null);
   const strokesRef = useRef<Stroke[]>(strokes);
@@ -151,8 +120,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       zoom: camera.zoom,
     });
   }, [camera.x, camera.y, camera.zoom]);
-
-  // ── Eraser Hit-Test ───────────────────────────────────
 
   const eraseAtPoint = useCallback(
     (point: Point) => {
@@ -176,14 +143,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     [config.thickness, onRemoveStroke],
   );
 
-  // ── Filter visible strokes ────────────────────────────
-
   const visibleStrokes = useMemo(
     () => strokes.filter((s) => s.tool !== 'eraser'),
     [strokes],
   );
-
-  // ── Wheel (Zoom + Scroll Pan) ────────────────────────
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     const isPinch = e.ctrlKey || e.metaKey;
@@ -206,8 +169,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }));
     }
   }, []);
-
-  // ── Pointer Down ─────────────────────────────────────
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -243,8 +204,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     },
     [config.tool, spaceHeld, onDrawingChange, eraseAtPoint],
   );
-
-  // ── Pointer Move ─────────────────────────────────────
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -302,8 +261,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     [mode, onCursorMove, eraseAtPoint],
   );
 
-  // ── Pointer Up ───────────────────────────────────────
-
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
       if (mode === 'pencil' && pencilDraft && pencilDraft.length > 0) {
@@ -333,19 +290,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       try {
         (e.target as Element).releasePointerCapture(e.pointerId);
       } catch {
-        /* pointer already released */
       }
     },
     [mode, pencilDraft, userId, config.color, config.thickness, onAddStroke, onDrawingChange],
   );
 
-  // ── Pointer Leave ────────────────────────────────────
-
   const onPointerLeave = useCallback(() => {
     onCursorMove?.(null);
   }, [onCursorMove]);
-
-  // ── Keyboard ─────────────────────────────────────────
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -377,8 +329,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     };
   }, []);
 
-  // ── Prevent Browser Pinch Zoom ──────────────────────
-
   useEffect(() => {
     const prevent = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) e.preventDefault();
@@ -392,8 +342,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     window.addEventListener('gesturestart', prevent, { passive: false });
     return () => window.removeEventListener('gesturestart', prevent);
   }, []);
-
-  // ── Cursor Style ─────────────────────────────────────
 
   const getCursor = (): string => {
     switch (mode) {
@@ -409,8 +357,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   };
 
   const showGrid = 30 * camera.zoom >= 10;
-
-  // ── Imperative Handle ────────────────────────────────
 
   useImperativeHandle(
     ref,
@@ -511,8 +457,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }),
     [strokes, camera],
   );
-
-  // ── Render ───────────────────────────────────────────
 
   return (
     <div

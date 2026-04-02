@@ -1,13 +1,5 @@
 'use client';
 
-// ============================================================
-// Chat Panel Component
-// ============================================================
-// Simple real-time chat for the whiteboard.
-// Messages are sent via the Socket.io provider and displayed
-// in a scrollable panel with auto-scroll to bottom.
-// ============================================================
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,16 +9,11 @@ import { formatTimestamp, generateId } from '@/lib/whiteboard/utils';
 import { X, Send, MessageSquare } from 'lucide-react';
 
 interface ChatPanelProps {
-  /** Current user session */
   userId: string;
   username: string;
-  /** Whether the panel is visible */
   visible: boolean;
-  /** Close callback */
   onClose: () => void;
-  /** Send message callback (uses the provider) */
   onSendMessage: (message: ChatMessage) => void;
-  /** Incoming chat messages from other users */
   messages: ChatMessage[];
 }
 
@@ -41,7 +28,6 @@ export default function ChatPanel({
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

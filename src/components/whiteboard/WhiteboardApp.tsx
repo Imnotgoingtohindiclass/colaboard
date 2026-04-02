@@ -78,7 +78,6 @@ export default function WhiteboardApp({ boardId, onBack }: WhiteboardAppProps) {
       setChatMessages(history);
     });
 
-    // board-store emits 'users-update' with (users, cursors) as two args
     store.on('users-update', (...args: unknown[]) => {
       const newUsers = args[0] as BoardUser[];
       const newCursors = args[1] as RemoteCursor[];

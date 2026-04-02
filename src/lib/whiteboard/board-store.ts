@@ -19,30 +19,8 @@ export interface RemoteCursor {
 
 type Listener = (...args: any[]) => void;
 
-// ══════════════════════════════════════════════════════════════════
-// Real-time Architecture (Dual-layer)
-// ══════════════════════════════════════════════════════════════════
-//
-// Layer 1 — Supabase Realtime (postgres_changes)
-//   Strokes INSERT/DELETE and chat INSERT are synced via
-//   Supabase's WebSocket → WAL pipeline.
-//
-// Layer 2 — BroadcastChannel (browser native)
-//   Cursors and presence are sent via the browser's built-in
-//   BroadcastChannel API. Same-browser tabs only.
-//
-// Persistence — Supabase REST
-//   Initial data loaded via SELECT. Writes go through INSERT.
-//
-// Optimistic updates
-//   Self-initiated actions emit events locally IMMEDIATELY.
-//   postgres_changes delivers the same event back (deduped by id).
-// ══════════════════════════════════════════════════════════════════
-
 const PRESENCE_TIMEOUT = 8000;
 let storeCounter = 0;
-
-// ── Row → domain object mappers ──────────────────────────────
 
 function mapStrokeRow(row: Record<string, unknown>): Stroke {
   return {
@@ -68,10 +46,6 @@ function mapChatRow(row: Record<string, unknown>): ChatMessage {
     timestamp: new Date(row.created_at as string).getTime(),
   };
 }
-
-// ══════════════════════════════════════════════════════════════════
-// RealtimeBridge — Module-level Supabase channel manager
-// ══════════════════════════════════════════════════════════════════
 
 interface BridgeEntry {
   bridge: RealtimeBridge;
@@ -165,8 +139,6 @@ function getBridge(boardId: string): RealtimeBridge {
   return bridges.get(boardId)!.bridge;
 }
 
-// ── BroadcastChannel cache ──────────────────────────────────
-
 const bcCache = new Map<string, BroadcastChannel>();
 function getBc(boardId: string): BroadcastChannel {
   if (!bcCache.has(boardId)) {
@@ -174,10 +146,6 @@ function getBc(boardId: string): BroadcastChannel {
   }
   return bcCache.get(boardId)!;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// BoardStore — Per-component instance
-// ══════════════════════════════════════════════════════════════════
 
 export class BoardStore {
   private boardId: string | null = null;
@@ -197,8 +165,6 @@ export class BoardStore {
   private remoteUsers = new Map<string, { user: BoardUser; lastSeen: number }>();
   private remoteCursors = new Map<string, RemoteCursor>();
 
-  // ── Event emitter ──────────────────────────────────────────
-
   on(event: string, listener: Listener): () => void {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
     this.listeners.get(event)!.add(listener);
@@ -213,8 +179,6 @@ export class BoardStore {
     if (!this.boardId) return;
     this.emit(event, ...args);
   }
-
-  // ── Helpers ───────────────────────────────────────────────
 
   private emitUsersUpdate() {
     const users = Array.from(this.remoteUsers.values()).map((u) => u.user);
@@ -237,8 +201,6 @@ export class BoardStore {
     });
   }
 
-  // ── Connect / Disconnect ───────────────────────────────────
-
   async connect(boardId: string, user: UserSession): Promise<void> {
     if (this.boardId === boardId) return;
     this.doCleanup();
@@ -247,8 +209,6 @@ export class BoardStore {
     this.redoStack = [];
     this.remoteUsers.clear();
     this.remoteCursors.clear();
-
-    // ── 1. Load initial data via REST ──
 
     const { data: strokeRows, error: strokeErr } = await supabase
       .from('strokes').select('*').eq('board_id', boardId)
@@ -269,12 +229,8 @@ export class BoardStore {
       this.emit('chat-history', chatRows.map(mapChatRow));
     }
 
-    // ── 2. Subscribe to Supabase Realtime ──
-
     const bridge = getBridge(boardId);
     bridge.addStore(this);
-
-    // ── 3. Set up BroadcastChannel ──
 
     this.bc = getBc(boardId);
 
@@ -308,12 +264,8 @@ export class BoardStore {
     };
     this.bc.addEventListener('message', this._bcHandler);
 
-    // ── 4. Announce presence + keepalive ──
-
     this.announcePresence();
     this._keepalive = setInterval(() => this.announcePresence(), 3000);
-
-    // ── 5. Stale user cleanup ──
 
     this._cleanup = setInterval(() => {
       const now = Date.now();
@@ -330,8 +282,6 @@ export class BoardStore {
 
     this.emit('connection-change', true);
   }
-
-  // ── Public API ─────────────────────────────────────────────
 
   async addStroke(stroke: Stroke): Promise<void> {
     if (!this.boardId) return;
@@ -458,8 +408,6 @@ export class BoardStore {
       console.error('[BoardStore] Failed to persist chat:', error);
     }
   }
-
-  // ── Cleanup ───────────────────────────────────────────────
 
   private doCleanup() {
     if (this._keepalive) { clearInterval(this._keepalive); this._keepalive = null; }
