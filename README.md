@@ -16,7 +16,7 @@ Real-time collaborative whiteboard. No sign-up required.
 
 ## How It Works
 
-Drawing and chat data is persisted in Supabase (PostgreSQL). When a stroke is drawn or a message is sent, it's written to the database and simultaneously pushed to all connected clients via Supabase Realtime's `postgres_changes` WebSocket channel. The drawing user sees changes immediately via optimistic local rendering — everyone else receives them through the WebSocket with minimal latency.
+Drawing and chat data is persisted in Supabase (PostgreSQL). When a stroke is drawn or a message is sent, it's written to the database and simultaneously pushed to all connected clients via Supabase Realtime's `postgres_changes` WebSocket channel. The drawing user sees changes immediately via optimistic local rendering, everyone else receives them through the WebSocket with minimal latency.
 
 Cursor positions and presence updates use the browser's native BroadcastChannel API for instant same-browser tab-to-tab delivery with zero network overhead. These are ephemeral and don't need to persist across devices.
 
